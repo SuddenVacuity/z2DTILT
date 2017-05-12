@@ -1,0 +1,238 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+/// <summary>
+/// Script to Control Player Movement
+/// 
+/// -Control player position
+/// -Move the player with touch screen: movement is relative to current touch point from initial touch point
+/// -Create a graphic to show inital touch location
+/// </summary>
+
+public class playerController : MonoBehaviour
+{
+    /////////////////////////////////////////////
+    // PUBLIC VARIABLES
+    /////////////////////////////////////////////
+    // speed multiplier for player movement
+    public float speed = 5.0f;
+    // dead zone for touch input (in [???units])
+    public float deadZoneTouch = 2000.0f;
+    public float maxTouchArrowSize = 300.0f;
+    public float minTouchArrowSize = 0.0f;
+    // TODO: remove this when an image that's the propoer size in used
+    public Vector3 touchArrowScale = new Vector3(10, 4, 1);
+
+    /////////////////////////////////////////////
+    // DEFINED IN UNITY EDITOR
+    /////////////////////////////////////////////
+    // initial touch point graphic
+    public GameObject touchPointPrefab;
+    public GameObject touchArrowPrefab;
+
+    /////////////////////////////////////////////
+    // PRIVATE VARIABLES
+    /////////////////////////////////////////////
+    // time counter
+    private float accumulator = 0;
+    // set to true when touchinga touch screen
+    private bool touching = false;
+    // initial touch point
+    private Vector2 touchPosInitial = Vector2.zero;
+    // world point for initial touch point
+    private Vector3 touchWorldPoint = Vector3.zero;
+    // location behind camera to hide sprites when not in use
+    private Vector3 dumpingGround = new Vector3(0, 0, -100);
+    // previous touch delta - used to rotate touchArrow
+    private Vector2 touchPosPrev = Vector2.zero;
+    // angle from touchPosInitial and touchPosPrev
+    private float anglePrev = 0.0f;
+
+    // Use this for initialization
+    void Start () 
+	{
+        // set initial player position
+		transform.position = Vector3.zero;
+
+        // create touch point objects in a hidden location
+        touchArrowPrefab = Instantiate(
+        touchArrowPrefab,
+        dumpingGround,
+        Camera.main.transform.rotation);
+
+        touchPointPrefab = Instantiate(
+        touchPointPrefab,
+        dumpingGround,
+        Camera.main.transform.rotation);
+        
+        touchArrowPrefab.transform.localScale = Vector3.zero;
+
+    } // end Start()
+	
+	// Update is called once per frame
+	void Update ()
+    {
+        if (Input.touchCount > 0)
+        {
+            touching = true;
+
+            // tenp way to close application
+            // close application when more than on point on screen is touched
+            if (Input.touchCount > 1)
+            {
+                Application.Quit();
+                return;
+            }
+
+            /////////////////////////////////////////////
+            // GET TOUCH POINT
+            /////////////////////////////////////////////
+
+            // if there is no initial touch point
+            if (touchPosInitial == Vector2.zero)
+            {
+                // get initial touch point
+                touchPosInitial = Input.GetTouch(0).position;
+                touchPosPrev = touchPosInitial;
+
+                // convert initial touch point to world point
+                touchWorldPoint = Camera.main.ScreenToWorldPoint(touchPosInitial);
+                touchWorldPoint.z = 8.0f;
+
+                // move hidden touch point sprites to world touch point
+                touchPointPrefab.transform.position = touchWorldPoint;
+                touchArrowPrefab.transform.position = touchWorldPoint;
+
+                touchArrowPrefab.transform.localScale = Vector3.one;
+            }
+
+            /////////////////////////////////////////////
+            // GET TOUCH DELTA TO CALCULATE MOVEMENT
+            /////////////////////////////////////////////
+
+            // get current touch location
+            Vector2 touchPosCurrent = Input.GetTouch(0).position;
+
+            // get distance between initial and current touch point
+            float currentTouchPosDistance = Vector2.Distance(touchPosInitial, touchPosCurrent);
+
+            //Debug.Log("currentTouchPosDistance = " + currentTouchPosDistance);
+
+            // input dead zone check
+            if (currentTouchPosDistance > deadZoneTouch)
+            {
+                float touchPosDeltaDistance = Vector2.Distance(touchPosPrev, touchPosCurrent);
+
+                // check if difference in delta is large enough to matter
+                if (touchPosDeltaDistance > 0.0f)
+                {
+                    /////////////////////////////////////////////
+                    // CHANGE TOUCHARROW ROTATION
+                    /////////////////////////////////////////////
+
+                    Vector2 v2 = (touchPosCurrent - touchPosInitial).normalized;
+                    float angle = Mathf.Atan2(v2.y, v2.x) * Mathf.Rad2Deg;
+
+                    // convert angle range to degrees
+                    // previously 0 >>> 180 > -180 >>> -0 > 0
+                    // new 0 >>> 360 > 0
+                    if (angle < 0)
+                        angle += 360;
+
+                    float angleDelta = angle - anglePrev;
+
+                    //Debug.Log("angle = " + angle);
+                    //Debug.Log("anglePrev = " + anglePrev);
+                    //Debug.Log("angleDelta = " + angleDelta);
+                    
+                    //Debug.Log("touchPosInitial = " + touchPosInitial);
+                    //Debug.Log("touchPosCurrent = " + touchPosCurrent);
+
+                    touchArrowPrefab.transform.Rotate(0, 0, angleDelta);
+
+                    anglePrev = angle;
+
+                    /////////////////////////////////////////////
+                    // CHANGE TOUCHARROW SCALE
+                    /////////////////////////////////////////////
+                    
+                    float dist = currentTouchPosDistance;
+                    dist = Mathf.Clamp(dist, minTouchArrowSize, maxTouchArrowSize);
+
+                    float ps = dist / maxTouchArrowSize * touchArrowScale.x;
+                    float cs = Mathf.Clamp((1.0f - dist / maxTouchArrowSize) * 2.0f, 
+                        0.3f, 
+                        10.0f);
+
+                    Vector3 parentScale = new Vector3(ps, ps, 1);
+                    Vector3 childscale = new Vector3(1, cs, 1);
+
+                    //Debug.Log("parentScale = " + parentScale);
+                    //Debug.Log("childScale = " + childscale);
+
+                    touchArrowPrefab.transform.localScale = parentScale;
+                    touchArrowPrefab.transform.GetChild(0).transform.localScale = childscale;
+
+
+                }
+
+                /////////////////////////////////////////////
+                // PLAYER MOVEMENT
+                /////////////////////////////////////////////
+
+                // find the delta used to move player
+                Vector2 touchPosDelta = touchPosPrev - touchPosInitial;
+                //Debug.Log("touchPosDelta = " + touchPosDelta);
+
+                // normalize movement
+                touchPosDelta = touchPosDelta.normalized;
+
+                // adjust for framerate
+                touchPosDelta *= Time.deltaTime;
+
+                // adjust to speed
+                //touchPosDelta *= speed;
+
+                // move player
+                transform.Translate(touchPosDelta.x, touchPosDelta.y, 0);
+
+                /////////////////////////////////////////////
+                // CARRY DATA TO NEXT FRAME
+                /////////////////////////////////////////////
+
+                touchPosPrev = touchPosCurrent;
+
+            }
+
+
+
+        } // end if (touchPos == Vector2.zero)
+        // only run once after touching
+        else if(touching == true && Input.touchCount == 0)
+        {
+            // hide initial touch point sprite
+            touchPointPrefab.transform.position = dumpingGround;
+            touchArrowPrefab.transform.position = dumpingGround;
+            touchArrowPrefab.transform.localScale = Vector3.zero;
+
+            // reset touch tracking values
+            touchPosInitial = Vector2.zero;
+            touchPosPrev = Vector2.zero;
+            touching = false;
+        }
+
+        // add time to time counter
+		accumulator += Time.deltaTime;
+
+        // run every 3 seconds
+		if(accumulator > 3.0f)
+		{
+            // reset player location
+			transform.position = Vector3.zero;
+
+            // reset accumulator
+			accumulator = 0;
+		}
+	} // end Update()
+}

@@ -1,0 +1,1176 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+/// <summary>
+/// Script to Control Player Movement
+/// 
+/// -Control player position
+/// -Move the player with touch screen: movement is relative to current touch point from initial touch point
+/// -Create a graphic to show inital touch location
+/// </summary>
+
+public class playerController : MonoBehaviour
+{
+
+    /*
+     * Get number of touches
+     * cycle through touches
+     *  -check location of touch
+     *  -check if in gui region
+     *  -assign gui region id to touch id
+     * cycle through touches, check id and do stuff
+     *  -switch(touchId[guiRegionID])
+     *  --do stuff
+     *  redo all ID's if touch count changes
+     *  cycle through touched regions to check if still touched
+     *  -do stuff
+     *  cycle though regions updating time change
+     *  
+     * 
+     * 
+     * 
+     */
+
+    //////////////////////////////////////////
+    // GUI ELEMENT VARIABLES
+    //////////////////////////////////////////
+
+    // bitmask index for gui elements
+    enum ENUMguiIndex
+    {
+        None = 0,       // default value no element is touched
+        Joystick = 1,   // x and y axis input from initial touch point
+        Swipe = 2,      // tap/direction input for touch point
+        SystemMenu = 4, // continue, quit, save, load, options
+        GameMenu = 8,
+    }
+
+    public Vector3 hiddenGraphicLocation; // location where graphics are hidden when not in use
+    public Vector3 hiddenUILocation; // location where graphics are hidden when not in use
+    public Camera camera;
+
+    private int m_screenWidth = 0;    // hold screen width to not call Screen.width
+    private int m_screenHeight = 0;   // hold screen height to not call Screen.height
+
+    private int m_guiTouchStateMask = 0;        // bitmask for gui state -- uses ENUMuigIndex
+    private int m_guiActiveUIStateMask = 0;        // bitmask for gui state -- uses ENUMuigIndex
+    private int m_numTouches = 0;          // number of touches -- used to check for changes in number of touches
+    private int m_maxTouchCount = 10;      // max number of simultanious touches -- touchIndex must have space
+    private int[] m_touchIndex = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };  // holds the gui index for each touch
+
+    /////////////////////////////////////////////
+    //
+    //      AUTOMATIC METHODS
+    //
+    /////////////////////////////////////////////
+
+    void Start()
+    {
+        // TODO: account for portrait vs landscape orientation
+
+        // set screen size
+        m_screenWidth = Screen.width;
+        m_screenHeight = Screen.height;
+        
+        // set initial player position
+        transform.position = Vector3.zero;
+
+        // set camera
+        camera = Camera.main;
+
+        joystickInit(true);
+        swipeInit(true);
+        systemMenuInit(false);
+    }
+
+    void Update()
+    {
+        // create a copy of previous state to compare to current state
+        int guiTouchStateMaskPrev = m_guiTouchStateMask;
+
+        // get current touch count
+        int touchCount = Input.touchCount;
+        if (touchCount > m_maxTouchCount)
+            touchCount = m_maxTouchCount;
+        
+        // check if touch count has changed
+        if(touchCount != m_numTouches)
+            updateTouchIndex(touchCount);
+
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            updateBackKeyPressed(); // handles gui state - brings up system menu
+        }
+        else
+        {
+            updateTouchOnHold();     // performs action on hold for each touch
+            updateTouchOnRelease(guiTouchStateMaskPrev);  // performs on release for each touch
+        }
+
+
+    }
+
+    /////////////////////////////////////////////
+    //
+    //      KEY METHODS
+    //
+    /////////////////////////////////////////////
+
+    // runs when back is pressed - controls gui state
+    private void updateBackKeyPressed()
+    {
+        // clear previous touch flags and add system menu flag
+        m_guiTouchStateMask = (int)ENUMguiIndex.SystemMenu;
+    }
+
+    /////////////////////////////////////////////
+    //
+    //      TOUCH METHODS
+    //
+    /////////////////////////////////////////////
+
+    // assigns a gui id to each touchIndex[] for each touch and adds gui enum to mask
+    // where (int touchCount) is current number of touches
+    // also gui regions are initialized
+    private void updateTouchIndex(int touchCount)
+    {
+        Debug.Log("Updating touch Index");
+        // update numTouches for comparison next update
+        m_numTouches = touchCount;
+
+        // reset gui state
+        m_guiTouchStateMask = 0;
+        
+        // assign a GUI index to each touch
+        // cycles through each touch
+        int touchId = 0;
+        while (touchId < touchCount)
+        {
+            // get postion of touch
+            Vector2 touchPos = Input.GetTouch(touchId).position;
+
+            // reset touch index
+            m_touchIndex[touchId] = (int)ENUMguiIndex.None;
+
+            // check if point is inside rectangle and set touchIndex[touchId] if true
+            // the order of these controls the priority - first is higher priority
+            if (m_joystickTouchRegion.Contains(touchPos))
+            {
+                // do if gui element is not active
+                if (((int)ENUMguiIndex.Joystick & m_guiTouchStateMask) != (int)ENUMguiIndex.Joystick)
+                {
+                    Debug.Log("Touch Hold Position " + touchId + " is in the Joystick region");
+
+                    // register touch gui element to touchId
+                    m_touchIndex[touchId] = (int)ENUMguiIndex.Joystick;
+
+                    // add gui element flag to gui state
+                    m_guiTouchStateMask |= (int)ENUMguiIndex.Joystick;
+
+                    // do stuff here
+                    joystickOnPress(touchId);
+                }
+            }
+            else if (m_swipeTouchRegion.Contains(touchPos))
+            {
+                // do if gui element is not active
+                if (((int)ENUMguiIndex.Swipe & m_guiTouchStateMask) != (int)ENUMguiIndex.Swipe)
+                {
+                    Debug.Log("Touch Hold Position " + touchId + " is in the Swipe region");
+
+                    // register touch gui element to touchId
+                    m_touchIndex[touchId] = (int)ENUMguiIndex.Swipe;
+
+                    // add gui element flag to gui state
+                    m_guiTouchStateMask |= (int)ENUMguiIndex.Swipe;
+
+                    // do stuff here
+                    swipeOnPress(touchId);
+                }
+            }
+            else
+                Debug.Log("Touch Hold Position " + touchId + " is not in any region");
+
+            touchId++;
+        } // end while (i < touchCount)
+    }
+
+    // performs action on hold for each touch
+    private void updateTouchOnHold()
+    {
+        int touchId = 0;
+        while(touchId < m_numTouches)
+        {
+            switch (m_touchIndex[touchId])
+            {
+                case (int)ENUMguiIndex.None:
+                    {
+                        // do stuff here
+
+                        break;
+                    } // end case (int)ENUMguiIndex.Joystick
+                case (int)ENUMguiIndex.Joystick:
+                    {
+                        // break if gui element is no longer touched
+                        if (((int)ENUMguiIndex.Joystick & m_guiTouchStateMask) != (int)ENUMguiIndex.Joystick)
+                            break;
+
+                       // Debug.Log("Touch Position " + touchId + ": Joystick region held");
+
+                        // do stuff here
+                        joystickUpdate(touchId);
+
+                        break;
+                    } // end case (int)ENUMguiIndex.Joystick
+                case (int)ENUMguiIndex.Swipe:
+                    {
+                        // break if gui element is no longer touched
+                        if (((int)ENUMguiIndex.Swipe & m_guiTouchStateMask) != (int)ENUMguiIndex.Swipe)
+                            break;
+
+                        //Debug.Log("Touch Position " + touchId + ": Swipe region held");
+
+                        // do stuff here
+                        swipeUpdate(touchId);
+
+                        break;
+                    } // end case (int)ENUMguiIndex.Swipe
+                default: Debug.Log("playerController.updateTouchHoldAction() >> default case should not happen"); break;
+            }
+
+            touchId++;
+        } // end while(touchId < m_numTouches)
+    }
+
+    // performs action on release for each touch
+    private void updateTouchOnRelease(int guiStatePrev)
+    {
+        // check each region for if it was held last upadate and is NOT held this update
+        if (((int)ENUMguiIndex.Joystick & guiStatePrev) == (int)ENUMguiIndex.Joystick &&
+            ((int)ENUMguiIndex.Joystick & m_guiTouchStateMask) != (int)ENUMguiIndex.Joystick)
+        {
+            Debug.Log("Touch Joystick region released");
+
+            // do stuff here
+            joystickOnRelease();
+        }
+
+        if (((int)ENUMguiIndex.Swipe & guiStatePrev) == (int)ENUMguiIndex.Swipe &&
+            ((int)ENUMguiIndex.Swipe & m_guiTouchStateMask) != (int)ENUMguiIndex.Swipe)
+        {
+            Debug.Log("Touch Swipe region released");
+
+            // do stuff
+            swipeOnRelease();
+        }
+    }
+
+    /////////////////////////////////////////////////////////////////////////////////
+    //
+    //      JOYSTICK METHODS
+    //
+    /////////////////////////////////////////////////////////////////////////////////
+
+    // Joystick
+    public Vector2 joyTouchRegionPosition;
+    public Vector2 joyTouchRegionSize;
+    public GameObject JoyCenterPointPrefab;  // Grapical Object
+    public GameObject JoyCurrentPointPrefab; // Grapical Object
+    public bool joyIsGraphicVisible;
+    public float joyMaxDistance;     // max distance in pixels from the initial point
+    public float joyDeadZone;        // zone around the initial point that doesn't update player/graphics
+    public float joySpeed;           // base speed the joysitck moves the player
+    public float joySpeedMultMax;    // max multiplier for the base speed
+    public float joySpeedMultMin;    // min multiplier for the base speed
+    public float joyZpos;            // world z pos of UI element
+    private Rect m_joystickTouchRegion;    // region on the screen for this gui element - values 0~1 are % of the screen space
+    private Vector2 m_joyTouchPosInitial = Vector2.zero;  // coordinates of the initial touch point
+    private Vector2 m_joyTouchPosPrev = Vector2.zero;     // used to check it move/graphic update is needed
+    private float m_joyRotationPrev = 0; // last updates Rotation
+
+    // initializes all joystick game objects
+    private void joystickInit(bool isActive)
+    {
+        JoyCenterPointPrefab.transform.position = hiddenGraphicLocation;
+        JoyCurrentPointPrefab.transform.position = hiddenGraphicLocation;
+
+        JoyCenterPointPrefab = Instantiate(
+        JoyCenterPointPrefab,
+        hiddenGraphicLocation,
+        Camera.main.transform.rotation);
+
+        // TODO: add title screen
+        joystickSetRegionActive(isActive);
+    }
+
+    // controls if a region and related graphics are on screen
+    private void joystickSetRegionActive(bool isActive)
+    {
+        Vector2 position = hiddenUILocation;
+        Vector2 size = Vector2.zero;
+
+        // set gui element flag to inactive
+        m_guiActiveUIStateMask &= (int)ENUMguiIndex.Joystick;
+
+        if (isActive == true)
+        {
+            // set gui element flag to active
+            m_guiActiveUIStateMask |= (int)ENUMguiIndex.Joystick;
+            // set gui region locations
+            position.x = m_screenWidth * joyTouchRegionPosition.x;
+            position.y = m_screenHeight * joyTouchRegionPosition.y;
+            size.x = m_screenWidth * joyTouchRegionSize.x;
+            size.y = m_screenHeight * joyTouchRegionSize.y;
+        }
+
+        m_joystickTouchRegion.Set(
+            position.x,
+            position.y,
+            size.x,
+            size.y);
+    }
+
+    // runs on press
+    private void joystickOnPress(int touchId)
+    {
+        // if there is no initial touch point
+        if (m_joyTouchPosInitial == Vector2.zero)
+        {
+            // get initial touch point
+            m_joyTouchPosInitial = Input.GetTouch(touchId).position;
+            m_joyTouchPosPrev = m_joyTouchPosInitial;
+            
+            // set graphics
+            joyGraphicSetup();
+        }
+    }
+
+    // sets initial position and location of graphics
+    private void joyGraphicSetup()
+    {
+        if (joyIsGraphicVisible == false)
+            return;
+        
+        ////////////////////////
+        // POSITION 
+
+        // convert initial touch point to world point
+        Vector3 touchWorldPoint = camera.ScreenToWorldPoint(m_joyTouchPosInitial);
+        touchWorldPoint.z = joyZpos;
+        
+        // move hidden touch point sprites to world touch point
+        JoyCenterPointPrefab.transform.position = touchWorldPoint;
+        //JoyCurrentPointPrefab.transform.position = touchWorldPoint;
+
+        ///////////////////////////
+        // ROTATION
+        
+        Vector2 v2 = (m_joyTouchPosInitial).normalized;
+        float angle = Mathf.Atan2(v2.y, v2.x) * Mathf.Rad2Deg;
+
+        // convert angle range to degrees
+        // previously 0 >>> 180 > -180 >>> -0 > 0
+        // new 0 >>> 360 > 0
+        if (angle < 0)
+            angle += 360;
+        
+        float angleDelta = angle - m_joyRotationPrev;
+
+        //Debug.Log("angle = " + angle);
+        //Debug.Log("anglePrev = " + anglePrev);
+        //Debug.Log("angleDelta = " + angleDelta);
+
+        //Debug.Log("touchPosInitial = " + touchPosInitial);
+        //Debug.Log("touchPosCurrent = " + touchPosCurrent);
+
+        JoyCenterPointPrefab.transform.Rotate(0, 0, angleDelta);
+
+        m_joyRotationPrev = angle;
+    }
+
+    /////////////////////////////////////////////
+    //      JOYSTICK HOLD METHODS
+
+    // runs on update
+    private void joystickUpdate(int touchId)
+    {
+        Vector2 joyTouchPosCurrent = Input.GetTouch(touchId).position;
+        float touchDist = Vector2.Distance(m_joyTouchPosInitial, joyTouchPosCurrent);
+
+        // check deadzone
+        if (touchDist > joyDeadZone)
+        {
+            joyMovePlayer(touchDist, joyTouchPosCurrent);
+            joyMoveGraphics(touchDist, joyTouchPosCurrent);
+            
+            // CARRY DATA TO NEXT FRAME
+            m_joyTouchPosPrev = joyTouchPosCurrent;
+        }
+    }
+    
+    // moves player
+    private void joyMovePlayer(float touchDistance, Vector2 touchPos)
+    {
+        float speedMult = Mathf.Clamp(touchDistance / joyMaxDistance, joySpeedMultMin, joySpeedMultMax);
+        // find the delta used to move player
+        Vector2 touchPosDelta = touchPos - m_joyTouchPosInitial;
+
+        // normalize movement
+        touchPosDelta = touchPosDelta.normalized;
+
+        // adjust for framerate
+        touchPosDelta *= Time.deltaTime;
+
+        // adjust to speed
+        //touchPosDelta *= speed;
+
+        // move player
+        transform.Translate(
+            touchPosDelta.x * joySpeed * speedMult,
+            touchPosDelta.y * joySpeed * speedMult,
+            0);
+    }
+
+    // moves graphics
+    private void joyMoveGraphics(float touchDistance, Vector2 touchPos)
+    {
+        // check if graphic should show
+        if (joyIsGraphicVisible == false)
+            return;
+
+        // check for a change in touch location
+        if ((touchPos - m_joyTouchPosPrev) == Vector2.zero)
+            return;
+        
+        ///////////////////////////////
+        // POSITION
+
+        // make center point follow touch if out of range
+        if (touchDistance > joyMaxDistance)
+        {
+            float touchDistanceDeltaPercent = 1 - joyMaxDistance / touchDistance;
+            float touchPointDeltaPixels = joyMaxDistance * touchDistanceDeltaPercent;
+
+            // get the delta between between the 2 points
+            Vector2 touchPointDelta = touchPos - m_joyTouchPosInitial;
+            
+            touchPointDelta = touchPointDelta.normalized * touchPointDeltaPixels;
+
+            // update centerpoint
+            m_joyTouchPosInitial += touchPointDelta;
+
+            // conver new point to work point
+            Vector3 touchWorldPointCenter = camera.ScreenToWorldPoint(m_joyTouchPosInitial);
+            touchWorldPointCenter.z = joyZpos;
+
+            // move the graphic to the new point
+            JoyCenterPointPrefab.transform.position = touchWorldPointCenter;
+            //JoyCurrentPointPrefab.transform.position = touchWorldPoint;
+        }
+
+        ///////////////////////////////
+        // ROTATION
+
+        //arrowPrefab_region1.transform.localScale = Vector3.one;
+        Vector2 v2 = (touchPos - m_joyTouchPosInitial).normalized;
+        float angle = Mathf.Atan2(v2.y, v2.x) * Mathf.Rad2Deg;
+
+        // convert angle range to degrees
+        // previously 0 >>> 180 > -180 >>> -0 > 0
+        // new 0 >>> 360 > 0
+        if (angle < 0)
+            angle += 360;
+
+        float angleDelta = angle - m_joyRotationPrev;
+
+        //Debug.Log("angle = " + angle);
+        //Debug.Log("anglePrev = " + anglePrev);
+        //Debug.Log("angleDelta = " + angleDelta);
+
+        //Debug.Log("touchPosInitial = " + touchPosInitial);
+        //Debug.Log("touchPosCurrent = " + touchPosCurrent);
+
+        JoyCenterPointPrefab.transform.Rotate(0, 0, angleDelta);
+
+        m_joyRotationPrev = angle;
+
+    }
+
+    /////////////////////////////////////////////
+    //      JOYSTICK RELEASE METHODS
+    
+    // runs on release
+    private void joystickOnRelease()
+    {
+        // hide initial touch point sprite
+        JoyCenterPointPrefab.transform.position = hiddenGraphicLocation;
+        //JoyCurrentPointPrefab.transform.position = hiddenGraphicLocation;
+        //arrowPrefab_region1.transform.localScale = Vector3.zero;
+
+        // reset touch tracking values
+        m_joyTouchPosInitial = Vector2.zero;
+        m_joyTouchPosPrev = Vector2.zero;
+
+        // reset accumulator
+        //accumulator_region1 = 0;
+    }
+
+    /////////////////////////////////////////////////////////////////////////////////
+    //
+    //      SWIPE METHODS
+    //
+    /////////////////////////////////////////////////////////////////////////////////
+
+    // Swipe
+    enum ENUMswipeInput
+    {
+        None = 0,
+        Up = 1,
+        Down = 2,
+        Left = 3,
+        Right = 4,
+        Tap = 5,
+    }
+    public Vector2 swipeTouchRegionPosition;
+    public Vector2 swipeTouchRegionSize;
+    public float swipeMaxDistance;     // max distnace to track swipe movement
+    public float swipeTapDistance;     // max distance to be considered a tap
+    public float swipeZpos;            // world z pos of UI element
+    private int m_swipeInputIndex = 0;        // contains each type of swipe input - uses
+    private Rect m_swipeTouchRegion;       // region on the screen for this gui element - values 0~1 are % of the screen space
+    private Vector2 m_swipeTouchPosInitial = Vector2.zero;  // coordinates of the initial touch point
+    private Vector2 m_swipeTouchPosEnd = Vector2.zero;  // coordinates of the end touch point
+
+    // initializes all swipe game objects
+    private void swipeInit(bool isActive)
+    {
+        swipeSetRegionActive(isActive);
+    }
+
+    // controls if a region and related graphics are on screen
+    private void swipeSetRegionActive(bool isActive)
+    {
+        Vector2 position = hiddenUILocation;
+        Vector2 size = Vector2.zero;
+
+        // set gui element flag to inactive
+        m_guiActiveUIStateMask &= (int)ENUMguiIndex.Swipe;
+
+        if (isActive == true)
+        {
+            // set gui element flag to active
+            m_guiActiveUIStateMask |= (int)ENUMguiIndex.Swipe;
+            // set gui region locations
+            position.x = m_screenWidth * swipeTouchRegionPosition.x;
+            position.y = m_screenHeight * swipeTouchRegionPosition.y;
+            size.x = m_screenWidth * swipeTouchRegionSize.x;
+            size.y = m_screenHeight * swipeTouchRegionSize.y;
+        }
+
+        m_swipeTouchRegion.Set(
+            position.x,
+            position.y,
+            size.x,
+            size.y);
+    }
+
+    // runs on press
+    private void swipeOnPress(int touchId)
+    {
+        Debug.Log("Swipe Started");
+        // if there is no initial touch point
+        if (m_swipeTouchPosInitial == Vector2.zero)
+        {
+            // get initial touch point
+            m_swipeTouchPosInitial = Input.GetTouch(touchId).position;
+            m_swipeTouchPosEnd = m_swipeTouchPosInitial;
+
+            // convert initial touch point to world point
+            //Vector3 touchWorldPoint = Camera.main.ScreenToWorldPoint(m_swipeTouchPosInitial);
+            //touchWorldPoint.z = swipeZpos;
+
+            // move hidden touch point sprites to world touch point
+            //pointPrefab_region2.transform.position = touchWorldPoint;
+        }
+    }
+
+    /////////////////////////////////////////////
+    //   SWIPE HOLD METHODS
+
+    // runs on update
+    private void swipeUpdate(int touchId)
+    {
+        //Debug.Log("Swipe Update");
+        //touchGraphicVisible_region2 = true;
+        //accumulator_region2 += Time.deltaTime;
+        //Debug.Log("Region2 is active");
+
+        m_swipeTouchPosEnd = Input.GetTouch(touchId).position;
+
+        //Vector3 trailWorldPoint = camera.ScreenToWorldPoint(touchPosCurrent_region2);
+        //trailWorldPoint.z = zPos;
+        //trailPrefab_region2.transform.position = trailWorldPoint;
+    }
+
+    /////////////////////////////////////////////
+    //   SWIPE RELEASE METHODS
+
+    // runs on release
+    private void swipeOnRelease()
+    {
+        Debug.Log("Swipe Release");
+        m_swipeInputIndex = swipeCalcSwipeDirection();
+        swipeOutput();
+
+        // clean up
+        m_swipeTouchPosInitial = Vector2.zero;
+        m_swipeTouchPosEnd = Vector2.zero;
+    }
+
+    // finds the direction of swipe from start and end points
+    private int swipeCalcSwipeDirection()
+    {
+        int output = (int)ENUMswipeInput.None;
+
+        float swipeTouchPosDistance = Vector2.Distance(m_swipeTouchPosInitial, m_swipeTouchPosEnd);
+
+        if(swipeTouchPosDistance < swipeTapDistance)
+            return (int)ENUMswipeInput.Tap;
+
+        // get angle of input
+        // TODO: move to updateSwipe() for graphics and store value for output
+        Vector2 swipeTouchPosDelta = m_swipeTouchPosEnd - m_swipeTouchPosInitial;
+
+        Vector2 v2 = swipeTouchPosDelta.normalized;
+        float angle = Mathf.Atan2(v2.y, v2.x) * Mathf.Rad2Deg;
+
+        if (angle < 0)
+            angle += 360;
+
+        // check range of angle
+        if (angle <= 45 || angle > 315)
+            output = (int)ENUMswipeInput.Right;
+        else if (angle <= 135 && angle > 45)
+            output = (int)ENUMswipeInput.Up;
+        else if (angle <= 225 && angle > 135)
+            output = (int)ENUMswipeInput.Left;
+        else if (angle <= 315 && angle > 225)
+            output = (int)ENUMswipeInput.Down;
+        else
+            Debug.Log("playerController.swipeCalcSwipeDirection() >> angle not valid (" + angle + ")");
+        
+        return output;
+    }
+
+    // performs a swipe action function depending on swipe direction
+    private void swipeOutput()
+    {
+        switch(m_swipeInputIndex)
+        {
+            case (int)ENUMswipeInput.Right: swipeActionRight(); break;
+            case (int)ENUMswipeInput.Left:  swipeActionLeft();  break;
+            case (int)ENUMswipeInput.Up:    swipeActionUp();    break;
+            case (int)ENUMswipeInput.Down:  swipeActionDown();  break;
+            case (int)ENUMswipeInput.Tap:   swipeActionTap();   break;
+            case (int)ENUMswipeInput.None:                      break;
+            default: Debug.Log("playerController.swipeOutput() >> default case should not happen"); break;
+        }
+    }
+
+    /////////////////////////////////////////////
+    //   SWIPE ACTION METHODS
+
+    private void swipeActionTap()
+    {
+        // do stuff here
+
+        // move player to center
+        transform.position = Vector3.zero;
+    }
+    private void swipeActionRight()
+    {
+        // do stuff here
+    }
+    private void swipeActionLeft()
+    {
+        // do stuff here
+    }
+    private void swipeActionUp()
+    {
+        // do stuff here
+    }
+    private void swipeActionDown()
+    {
+        // do stuff here
+        Application.Quit();
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////////
+    //
+    //      SYSTEM MENU METHODS
+    //
+    /////////////////////////////////////////////////////////////////////////////////
+
+    public Vector2 sysMenuMainRegionPosition;
+    public Vector2 sysMenuMainRegionSize;
+    public Vector2 sysMenuContinueRegionPosition;
+    public Vector2 sysMenuContinueRegionSize;
+    public Texture2D sysImageContinueButtonUp;
+    public Texture2D sysImageSaveButtonUp;
+    public Texture2D sysImageLoadButtonUp;
+    public Texture2D sysImageOptionsButtonUp;
+    public Texture2D sysImageQuitButtonUp;
+    private Rect m_systemMenuMainRegion;
+    private Rect m_systemMenuContinueRegion;
+
+    private void systemMenuInit(bool isActive)
+    {
+        systemMenuSetRegionActive(isActive);
+
+        ////////////////////////////////////
+        // GRAPHICS
+
+        // create image in world
+        sysImageContinueButtonUp = Instantiate(
+            sysImageContinueButtonUp,
+            hiddenGraphicLocation,
+            Camera.main.transform.rotation);
+
+        // resize image to region size
+        sysImageContinueButtonUp.Resize((int)sysMenuContinueRegionSize.x, (int)sysMenuContinueRegionSize.y);
+        
+    }
+
+    // controls if a region and related graphics are on screen
+    private void systemMenuSetRegionActive(bool isActive)
+    {
+        Vector2 position = hiddenUILocation;
+        Vector2 size = Vector2.zero;
+
+        // set gui element flag to inactive
+        m_guiActiveUIStateMask &= (int)ENUMguiIndex.SystemMenu;
+
+        if (isActive == true)
+        {
+            // set gui element flag to active
+            m_guiActiveUIStateMask |= (int)ENUMguiIndex.SystemMenu;
+
+            position.x = m_screenWidth * sysMenuMainRegionPosition.x;
+            position.y = m_screenHeight * sysMenuMainRegionPosition.y;
+            size.x = m_screenWidth * sysMenuMainRegionSize.x;
+            size.y = m_screenHeight * sysMenuMainRegionSize.y;
+        }
+
+        m_systemMenuContinueRegion.Set(
+            position.x,
+            position.y,
+            size.x,
+            size.y);
+    }
+
+    private void systemMenuSetup()
+    {
+
+    }
+
+    ////////////////////////////////
+    // SYSTEM MENU CLOSE
+
+    private void systemMenuClose()
+    {
+
+    }
+
+    /*
+/////////////////////////////////////////////
+// PUBLIC VARIABLES
+/////////////////////////////////////////////
+// speed multiplier for player movement
+public float speed = 5.0f;
+public float speedMultMax = 1.5f;
+// set to true if graphic should scale based on touch movement
+public bool graphicScale = true;
+
+/////////////////////////////////////////////
+// DEFINED IN UNITY EDITOR
+/////////////////////////////////////////////
+// initial touch point graphic
+public Camera camera;
+
+/////////////////////////////////////////////
+// PRIVATE VARIABLES
+/////////////////////////////////////////////
+// location behind camera to hide sprites when not in use
+private Vector3 dumpingGround = new Vector3(0, 0, -100);
+// Z position of interface graphics
+private float zPos = 8.0f;
+// index of touch that this scripts applies to
+private int touchIndex = 0;
+// vars for deciding touch region
+private int windowHeight = 0;
+private int windowWidth = 0;
+
+/////////////////////////////////////////////
+// REGION 1 VARIABLES
+/////////////////////////////////////////////
+
+private float accumulator_region1 = 0;
+private float speedMult = 0;
+public Vector2 pos_region1 = Vector2.zero;
+public Vector2 size_region1 = Vector2.zero;
+// graphic objects
+public GameObject pointPrefab_region1;
+public GameObject arrowPrefab_region1;
+// dead zone for touch input (in [???units])
+public float deadZoneTouch_region1 = 50.0f;
+public float maxTouchDistance_region1 = 300.0f;
+//public float minTouchArrowSize_region1 = 0.0f;
+public int graphicChildIndex_region1 = 0;
+// time the graphic remains after touch stops
+public float touchGraphicWaitTime_region1 = 1.0f;
+// TODO: remove this when an image that's the propoer size in used
+public Vector3 touchArrowScale_region1 = new Vector3(10, 4, 1);
+// set to true when region is touched
+private bool isTouched_region1 = false;
+// set to true when touchinga touch screen
+private bool touchGraphicVisible_region1 = false;
+// initial touch point
+private Vector2 touchPosInitial_region1 = Vector2.zero;
+// index of the child that is the graphic object
+// previous touch delta - used to rotate touchArrow
+private Vector2 touchPosPrev_region1 = Vector2.zero;
+// angle from touchPosInitial and touchPosPrev
+private float anglePrev_region1 = 0.0f;
+// minimum movement distnace to update graphic
+private float minDelta_region1 = 0.0f;
+
+
+/////////////////////////////////////////////
+// REGION 2 VARIABLES
+/////////////////////////////////////////////
+
+// time counter
+private float accumulator_region2 = 0;
+public float touchGraphicWaitTime_region2 = 1.0f;
+private bool isTouched_region2 = false;
+private bool touchGraphicVisible_region2 = false;
+private Vector2 touchPosInitial_region2 = Vector2.zero;
+private Vector2 touchPosDelta_region2 = Vector2.zero;
+private Vector2 touchPosPrev_region2 = Vector2.zero;
+public GameObject pointPrefab_region2;
+public GameObject trailPrefab_region2;
+
+
+
+
+public Vector2 pos_region2 = new Vector2(0, Screen.height / 2);
+public Vector2 size_region2 = new Vector2(Screen.width, Screen.height / 2);
+
+// Use this for initialization
+void Start()
+{
+    camera = Camera.main;
+    windowHeight = Screen.height;
+    windowWidth = Screen.width;
+    size_region1.x = windowWidth;
+    size_region1.y = windowHeight / 2;
+    pos_region1.x = 0;
+    pos_region1.y = windowHeight / 2;
+
+    size_region2.x = windowWidth;
+    size_region2.y = windowHeight / 2;
+    pos_region2.x = 0;
+    pos_region2.y = 0;
+
+    // set initial player position
+    transform.position = Vector3.zero;
+
+    // create touch point objects in a hidden location
+    arrowPrefab_region1 = Instantiate(
+    arrowPrefab_region1,
+    dumpingGround,
+    Camera.main.transform.rotation);
+
+    pointPrefab_region1 = Instantiate(
+    pointPrefab_region1,
+    dumpingGround,
+    Camera.main.transform.rotation);
+
+    arrowPrefab_region1.transform.localScale = Vector3.zero;
+
+} // end Start()
+
+// Update is called once per frame
+void Update()
+{
+    int touchCountInput = Input.touchCount;
+
+    if (touchCountInput > 0)
+    {
+
+        if (touchCountInput > 2)
+        {
+            Application.Quit();
+            return;
+        }
+
+        Vector2 touchPosCurrent_region1 = Input.GetTouch(0).position;
+
+        if (touchPosCurrent_region1.x >= pos_region1.x &&
+           touchPosCurrent_region1.y >= pos_region1.y &&
+           touchPosCurrent_region1.x <= (pos_region1.x + size_region1.x) &&
+           touchPosCurrent_region1.y <= (pos_region1.y + size_region1.y) ||
+           touchGraphicVisible_region1 == true)
+        {
+            Debug.Log("Region1 is active");
+            touchGraphicVisible_region1 = true;
+
+            /////////////////////////////////////////////
+            // GET TOUCH POINT
+            /////////////////////////////////////////////
+
+            // if there is no initial touch point
+            if (touchPosInitial_region1 == Vector2.zero)
+            {
+                // get initial touch point
+                touchPosInitial_region1 = Input.GetTouch(touchIndex).position;
+                touchPosPrev_region1 = touchPosInitial_region1;
+
+                // convert initial touch point to world point
+                Vector3 touchWorldPoint = camera.ScreenToWorldPoint(touchPosInitial_region1);
+                touchWorldPoint.z = zPos;
+
+                // move hidden touch point sprites to world touch point
+                pointPrefab_region1.transform.position = touchWorldPoint;
+                arrowPrefab_region1.transform.position = touchWorldPoint;
+
+                arrowPrefab_region1.transform.localScale = Vector3.one;
+            }
+
+            /////////////////////////////////////////////
+            // GET TOUCH DELTA TO CALCULATE MOVEMENT
+            /////////////////////////////////////////////
+
+            // get distance between initial and current touch point
+            float currentTouchPosDistance_region1 = Vector2.Distance(touchPosInitial_region1, touchPosCurrent_region1);
+
+            //Debug.Log("currentTouchPosDistance = " + currentTouchPosDistance);
+
+            // input dead zone check
+            if (currentTouchPosDistance_region1 > deadZoneTouch_region1)
+            {
+                float touchPosDeltaDistance = Vector2.Distance(touchPosPrev_region1, touchPosCurrent_region1);
+
+                // check if difference in delta is large enough to matter
+                if (touchPosDeltaDistance > minDelta_region1)
+                {
+                    /////////////////////////////////////////////
+                    // CHANGE TOUCHARROW ROTATION
+                    /////////////////////////////////////////////
+
+                    Vector2 v2 = (touchPosCurrent_region1 - touchPosInitial_region1).normalized;
+                    float angle = Mathf.Atan2(v2.y, v2.x) * Mathf.Rad2Deg;
+
+                    // convert angle range to degrees
+                    // previously 0 >>> 180 > -180 >>> -0 > 0
+                    // new 0 >>> 360 > 0
+                    if (angle < 0)
+                        angle += 360;
+
+                    float angleDelta = angle - anglePrev_region1;
+
+                    //Debug.Log("angle = " + angle);
+                    //Debug.Log("anglePrev = " + anglePrev);
+                    //Debug.Log("angleDelta = " + angleDelta);
+
+                    //Debug.Log("touchPosInitial = " + touchPosInitial);
+                    //Debug.Log("touchPosCurrent = " + touchPosCurrent);
+
+                    arrowPrefab_region1.transform.Rotate(0, 0, angleDelta);
+
+                    anglePrev_region1 = angle;
+
+
+                    if (graphicScale == true)
+                    {
+                        /////////////////////////////////////////////
+                        // CHANGE TOUCHARROW SCALE
+                        /////////////////////////////////////////////
+
+                        float dist = currentTouchPosDistance_region1;
+                        dist = Mathf.Clamp(dist, 0, maxTouchDistance_region1);
+                        //dist = Mathf.Clamp(dist, minTouchArrowSize_region1, maxTouchArrowSize_region1);
+
+                        float ps = dist / maxTouchDistance_region1 * touchArrowScale_region1.x;
+                        float cs = Mathf.Clamp((1.0f - dist / maxTouchDistance_region1) *
+                            2.0f,
+                            0.3f,
+                            10.0f);
+
+                        Vector3 parentScale = new Vector3(ps, ps, 1);
+                        Vector3 childscale = new Vector3(1, cs, 1);
+
+                        //Debug.Log("parentScale = " + parentScale);
+                        //Debug.Log("childScale = " + childscale);
+
+                        arrowPrefab_region1.transform.localScale = parentScale;
+                        arrowPrefab_region1.transform.GetChild(graphicChildIndex_region1).transform.localScale = childscale;
+                    }
+                } // end if (touchPosDeltaDistance > minDelta_region1)
+
+                /////////////////////////////////////////////
+                // PLAYER MOVEMENT
+                /////////////////////////////////////////////
+
+                speedMult = Mathf.Clamp(currentTouchPosDistance_region1 / maxTouchDistance_region1, 0, speedMultMax);
+
+                // find the delta used to move player
+                Vector2 touchPosDelta = touchPosPrev_region1 - touchPosInitial_region1;
+                //Debug.Log("touchPosDelta = " + touchPosDelta);
+
+                // normalize movement
+                touchPosDelta = touchPosDelta.normalized;
+
+                // adjust for framerate
+                touchPosDelta *= Time.deltaTime;
+
+                // adjust to speed
+                //touchPosDelta *= speed;
+
+                // move player
+                transform.Translate(
+                    touchPosDelta.x * speed * speedMult, 
+                    touchPosDelta.y * speed * speedMult,
+                    0);
+
+                /////////////////////////////////////////////
+                // CARRY DATA TO NEXT FRAME
+                /////////////////////////////////////////////
+
+                touchPosPrev_region1 = touchPosCurrent_region1;
+            }
+        } // end region 1 check
+
+        if (touchCountInput < 2)
+            return;
+
+        Vector2 touchPosCurrent_region2 = Input.GetTouch(1).position;
+
+        if (touchPosCurrent_region2.x >= pos_region2.x &&
+           touchPosCurrent_region2.y >= pos_region2.y &&
+           touchPosCurrent_region2.x <= (pos_region2.x + size_region2.x) &&
+           touchPosCurrent_region2.y <= (pos_region2.y + size_region2.y) ||
+           touchGraphicVisible_region2 == true)
+        {
+            touchGraphicVisible_region2 = true;
+            accumulator_region2 += Time.deltaTime;
+            Debug.Log("Region2 is active");
+
+
+            // if there is no initial touch point
+            if (touchPosInitial_region2 == Vector2.zero)
+            {
+                // get initial touch point
+                touchPosInitial_region2 = Input.GetTouch(1).position;
+                touchPosPrev_region2 = touchPosInitial_region2;
+
+                // convert initial touch point to world point
+                Vector3 touchWorldPoint = camera.ScreenToWorldPoint(touchPosInitial_region2);
+                touchWorldPoint.z = zPos;
+
+                // move hidden touch point sprites to world touch point
+                pointPrefab_region2.transform.position = touchWorldPoint;
+            }
+
+            touchPosCurrent_region2 = Input.GetTouch(1).position;
+            float touchPosDistance_region2 = Vector2.Distance(touchPosPrev_region2, touchPosCurrent_region2);
+
+            // check if difference is enough to matter
+            if(touchPosDistance_region2 > 0)
+            {
+                Vector3 trailWorldPoint = camera.ScreenToWorldPoint(touchPosCurrent_region2);
+                trailWorldPoint.z = zPos;
+                trailPrefab_region2.transform.position = trailWorldPoint;
+
+                // update delta to find input once touch ends
+                //touchPosDelta_region2 = touchPosCurrent_region2 - touchPosInitial_region2;
+                touchPosDelta_region2 += (touchPosDelta_region2 - (touchPosCurrent_region2 - touchPosInitial_region2));
+
+                Debug.Log("touchPosDelta_region2 = " + touchPosDelta_region2.x + ", " + touchPosDelta_region2.y);
+            }
+
+
+
+        } // end region 2 check
+
+
+    }
+    // run when not touching
+    else if (touchCountInput == 0)
+    {
+        // add time to time counter
+        if (touchGraphicVisible_region1 == true)
+            accumulator_region1 += Time.deltaTime;
+
+        if (touchGraphicVisible_region2 == true)
+        {
+            // get angle of input
+            Vector2 v2 = touchPosDelta_region2.normalized;
+            float angle = Mathf.Atan2(v2.y, v2.x) * Mathf.Rad2Deg;
+
+            if (angle < 0)
+                angle += 360;
+
+            // handle input result
+
+            if(angle > 350 && angle > 10)
+            {
+                transform.Translate(0, 0, 0);
+            }
+
+            // reset touch graphic
+            // hide initial touch point sprite
+            pointPrefab_region2.transform.position = dumpingGround;
+            trailPrefab_region2.transform.position = dumpingGround;
+
+            // reset touch tracking values
+            touchPosInitial_region2 = Vector2.zero;
+            touchPosPrev_region2 = Vector2.zero;
+            touchGraphicVisible_region2 = false;
+
+            // reset accumulator
+            accumulator_region2 = 0;
+        }
+    }
+
+
+    // check accumulator for region 1
+    if (accumulator_region1 > touchGraphicWaitTime_region1)
+    {
+        // hide initial touch point sprite
+        pointPrefab_region1.transform.position = dumpingGround;
+        arrowPrefab_region1.transform.position = dumpingGround;
+        arrowPrefab_region1.transform.localScale = Vector3.zero;
+
+        // reset touch tracking values
+        touchPosInitial_region1 = Vector2.zero;
+        touchPosPrev_region1 = Vector2.zero;
+        touchGraphicVisible_region1 = false;
+
+        // reset accumulator
+        accumulator_region1 = 0;
+
+        // move player to center
+        transform.position = Vector3.zero;
+    }
+
+    // check accumulator for region 2
+    if (accumulator_region2 > touchGraphicWaitTime_region2)
+    {
+
+    }
+} // end Update()
+// */
+}
