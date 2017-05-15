@@ -20,7 +20,8 @@ GENERAL
 	[x] scale ui
 	[ ] static size
 [ ] free foating in-game windows
-[ ] timers
+[.] timers
+	[.] game timer/frame counter
 [ ] input buffer
 [ ] shaders
 
@@ -30,6 +31,7 @@ GuiHandler
 [|] manage and control game state
 [|] control screen touch state
 [ ] dev can set starting state
+[ ] read and display fonts
 
 Basic Window (start screen/system menu/text box)
 [.] Graphics
@@ -39,8 +41,10 @@ Basic Window (start screen/system menu/text box)
 [.] Buttons
 	[x] Button State
 	[x] Up+Down+Disabled+Hidden Image
+	[.] Image changes when pressed/disabled
 	[x] Able to be pressed and released
-	[ ] dragging touch off the button prevents pressing
+	[x] dragging touch off the button prevents pressing
+	[ ] dragging onto a button causes it to be able to be pressed
 
 Main Gameplay
 [ ] HUD system
@@ -132,6 +136,20 @@ System Menu - Prefab
 ==============================================
 CHANGELOG
 ==============================================
+
+05/15/2017 - v0.0.0 - State Tracking Update + Timers - 0001
+===============================
+
+-added temporary way to exit if touchState breaks
+-added timer to track time program has been running
+-added control over wether or not input is accepted
+--boolean allow/disallow
+--add to timer to block input for an amount of time
+-made it possible to drag a touch off a button to not press it
+-improved touchstate tracking
+-renamed SystemMenu class to GameWindow
+-changed enums to uint type
+
 
 05/12/2017 - v0.0.0 - Initial Commit
 ===============================

@@ -8,9 +8,9 @@ using UnityEngine;
 /// </summary>
 
 [RequireComponent(typeof(SpriteRenderer))]
-public class SystemMenu : MonoBehaviour
+public class GameWindow : MonoBehaviour
 {
-    public enum ENUMsysButtonId
+    public enum ENUMwindowObjectId : uint
     {
         Continue = 1,
         Save = 2,
@@ -31,9 +31,9 @@ public class SystemMenu : MonoBehaviour
     public GuiButton u_buttonLoad;                      // button component
     public GuiButton u_buttonOptions;                   // button component
     public GuiButton u_buttonQuit;                      // button component
-    private int[] m_buttonStates = { 0, 0, 0, 0, 0 };   // array of the states of all buttons
+    private uint[] m_buttonStates = { 0, 0, 0, 0, 0 };  // array of the states of all buttons
     private SpriteRenderer m_spriteRenderer;            // reference to spriterenderer
-    private int m_componentId = 0;                      // id for the guihandler to keep track of componenets
+    private uint m_componentId = 0;                     // id for the guihandler to keep track of componenets
     private Rect m_systemMenuMainRegion;                // touchable region on screen
 
     public void Start()
@@ -74,7 +74,7 @@ public class SystemMenu : MonoBehaviour
     }
 
     // sets id and sets sprite visible, sets world object and touch area size, scale and position
-    public void init(bool isActive, int componentId, Vector2 screenSize, Vector2 hidePos)
+    public void init(bool isActive, uint componentId, Vector2 screenSize, Vector2 hidePos)
     {
         m_componentId = componentId;
         setActive(isActive, screenSize, hidePos);
@@ -111,23 +111,23 @@ public class SystemMenu : MonoBehaviour
         //Debug.Log("GuiButton.init() - scale = (" + scale.x + ", " + scale.y + ", " + scale.z + ")");
 
         // set up buttons
-        u_buttonContinue.init((int)ENUMsysButtonId.Continue, (int)GuiButton.ENUMbuttonState.Up, position, size);
-        u_buttonQuit.init((int)ENUMsysButtonId.Quit, (int)GuiButton.ENUMbuttonState.Up, position, size);
+        u_buttonContinue.init((uint)ENUMwindowObjectId.Continue, (uint)GuiButton.ENUMbuttonState.Up, position, size);
+        u_buttonQuit.init((uint)ENUMwindowObjectId.Quit, (uint)GuiButton.ENUMbuttonState.Up, position, size);
         if (isActive == true)
         {
-            u_buttonContinue.setState((int)GuiButton.ENUMbuttonState.Up);
-            u_buttonQuit.setState((int)GuiButton.ENUMbuttonState.Up);
+            u_buttonContinue.setState((uint)GuiButton.ENUMbuttonState.Up);
+            u_buttonQuit.setState((uint)GuiButton.ENUMbuttonState.Up);
         }
         else
         {
-            u_buttonContinue.setState((int)GuiButton.ENUMbuttonState.Hidden);
-            u_buttonQuit.setState((int)GuiButton.ENUMbuttonState.Hidden);
+            u_buttonContinue.setState((uint)GuiButton.ENUMbuttonState.Hidden);
+            u_buttonQuit.setState((uint)GuiButton.ENUMbuttonState.Hidden);
         }
 
-        //u_buttonSave.init((int)ENUMsysButtonId.Save, (int)GuiButton.ENUMbuttonState.Up, position, size);
-        //u_buttonLoad.init((int)ENUMsysButtonId.Load, (int)GuiButton.ENUMbuttonState.Up, position, size);
-        //u_buttonOptions.init((int)ENUMsysButtonId.Options, (int)GuiButton.ENUMbuttonState.Up, position, size);
-        //u_buttonQuit.init((int)ENUMsysButtonId.Quit, (int)GuiButton.ENUMbuttonState.Up, position, size);
+        //u_buttonSave.init((uint)ENUMsysButtonId.Save, (uint)GuiButton.ENUMbuttonState.Up, position, size);
+        //u_buttonLoad.init((uint)ENUMsysButtonId.Load, (uint)GuiButton.ENUMbuttonState.Up, position, size);
+        //u_buttonOptions.init((uint)ENUMsysButtonId.Options, (uint)GuiButton.ENUMbuttonState.Up, position, size);
+        //u_buttonQuit.init((uint)ENUMsysButtonId.Quit, (uint)GuiButton.ENUMbuttonState.Up, position, size);
 
         //Debug.Log("SystemMenu.setActive() - position = " + position);
         //Debug.Log("SystemMenu.setActive() - size = " + size);
@@ -161,7 +161,7 @@ public class SystemMenu : MonoBehaviour
     }
     
     // returns Id
-    public int getId()
+    public uint getId()
     {
         return m_componentId;
     }
@@ -169,6 +169,7 @@ public class SystemMenu : MonoBehaviour
     // action for on press
     public void onPress(Vector2 touchPos)
     {
+        // check if touch posistion is inside a component
         if (u_buttonContinue.contains(touchPos))
             u_buttonContinue.press(u_buttonContinue.getId());
         else
@@ -181,10 +182,53 @@ public class SystemMenu : MonoBehaviour
 
     }
 
-    // returns flags for press buttons
-    public int onRelease()
+    // return id of button(s) pressed or released
+    // buttonFlags - flags for all buttons to be checked
+    // isTouched - true to check if pressed / false to check if released
+    // touchPos - position on screen in pixels of touch
+    public uint getButtonTouched(uint buttonIdFlags, bool isTouched, Vector2 touchPos)
     {
-        int result = (int)ENUMsysButtonId.None;
+        uint id = (uint)ENUMwindowObjectId.None;
+        //Debug.Log("gamewindow.onhold() - componentId = " + buttonIdFlags);
+        //Debug.Log("gamewindow.onhold() - touchPos = " + touchPos);
+        // decide which button to check
+        // release button if touchPos is not inside
+        if((buttonIdFlags & (uint)ENUMwindowObjectId.Continue)  == (uint)ENUMwindowObjectId.Continue)
+        {
+            //Debug.Log("gamewindow.onhold() - _buttonContinue.contains(touchPos) = " + u_buttonContinue.contains(touchPos));
+            if (isTouched)
+            {
+                if (u_buttonContinue.contains(touchPos) == true)
+                {
+                    //Debug.Log("Continue Button Pressed");
+                    id += u_buttonContinue.press(u_buttonContinue.getId());
+                }
+            }
+            else
+                id += u_buttonContinue.release(u_buttonContinue.getId());
+        }
+
+        if ((buttonIdFlags & (uint)ENUMwindowObjectId.Quit) == (uint)ENUMwindowObjectId.Quit)
+        {
+            if (isTouched)
+            {
+                if (u_buttonQuit.contains(touchPos) == true)
+                {
+                    //Debug.Log("Quit Button Pressed");
+                    id += u_buttonQuit.press(u_buttonQuit.getId());
+                }
+            }
+            else
+                id += u_buttonQuit.release(u_buttonQuit.getId());
+        }
+        //Debug.Log("GameMenu.onHold() - id = " + id);
+        return id;
+    }
+
+    // returns flags for press buttons
+    public uint onRelease()
+    {
+        uint result = (uint)ENUMwindowObjectId.None;
 
         // add flags for released buttons
         result += u_buttonContinue.release(u_buttonContinue.getId());
@@ -201,15 +245,15 @@ public class SystemMenu : MonoBehaviour
     }
 
     // returns bitmask dof all pressed buttons
-    public int getPressedButtons(int id)
+    public uint getPressedButtons(uint id)
     {
-        int result = (int)ENUMsysButtonId.None;
+        uint result = (uint)ENUMwindowObjectId.None;
 
         result += u_buttonContinue.getIsPressed(id);
         result += u_buttonQuit.getIsPressed(id);
 
-        Debug.Log("SystemMenu.getPressedButtons() - id = " + id);
-        Debug.Log("SystemMenu.getPressedButtons() - result = " + result);
+        //Debug.Log("SystemMenu.getPressedButtons() - id = " + id);
+        //Debug.Log("SystemMenu.getPressedButtons() - result = " + result);
 
         return result;
     }

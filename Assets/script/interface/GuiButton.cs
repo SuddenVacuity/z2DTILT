@@ -15,7 +15,7 @@ using UnityEngine;
 [RequireComponent(typeof(SpriteRenderer))]
 public class GuiButton : MonoBehaviour
 {
-    public enum ENUMbuttonState
+    public enum ENUMbuttonState : uint
     {
         Hidden = 0,
         Up = 1,
@@ -25,12 +25,12 @@ public class GuiButton : MonoBehaviour
     }
     public Vector2 u_scrPosition;             // default position of the button
     public Vector2 u_scrSize;                 // default size of the button
-    public Texture2D u_up;                    // texture of button when active and not pressed
-    public Texture2D u_down;                  // texture of button when active and pressed
-    public Texture2D u_disabled;              // texture of inactive button
+    public Sprite u_up;                    // texture of button when active and not pressed
+    public Sprite u_down;                  // texture of button when active and pressed
+    public Sprite u_disabled;              // texture of inactive button
     private SpriteRenderer m_spriteRenderer;  // reference to the spriterenderer
-    private int m_buttonId = 0;               // used by menu to keep track of the button
-    private int m_state = 0;                  // state of the button - uses ENUMbuttonState
+    private uint m_buttonId = 0;               // used by menu to keep track of the button
+    private uint m_state = 0;                  // state of the button - uses ENUMbuttonState
     private Rect m_region = Rect.zero;        // current position and size of the button
 
     public void Start()
@@ -50,13 +50,13 @@ public class GuiButton : MonoBehaviour
     }
 
     //
-    public void init(int id, int state, Vector3 parentWindowPositionPixels, Vector3 parentWindowSizePixels)
+    public void init(uint id, uint state, Vector3 parentWindowPositionPixels, Vector3 parentWindowSizePixels)
     {
         // assign button id
         m_buttonId = id;
 
         // set visible to true if the button is no hidden
-        m_spriteRenderer.enabled = (state != (int)ENUMbuttonState.Hidden);
+        m_spriteRenderer.enabled = (state != (uint)ENUMbuttonState.Hidden);
 
         // set button state
         setState(state);
@@ -85,26 +85,26 @@ public class GuiButton : MonoBehaviour
         m_spriteRenderer.transform.localScale = scale;
     }
 
-    public void setState(int state)
+    public void setState(uint state)
     {
         m_state = state;
-        m_spriteRenderer.enabled = (m_state != (int)ENUMbuttonState.Hidden);
+        m_spriteRenderer.enabled = (m_state != (uint)ENUMbuttonState.Hidden);
         
-        //switch (m_state)
-        //{
-        //    case (int)ENUMbuttonState.Hidden:
-        //        break;
-        //    case (int)ENUMbuttonState.Up:
-        //        m_spriteRenderer.sprite = Sprite.Create(u_up, new Rect(0, 0, 1, 1), Vector2.zero);
-        //        break;
-        //    case (int)ENUMbuttonState.Down:
-        //        m_spriteRenderer.sprite = Sprite.Create(u_down, new Rect(0, 0, 1, 1), Vector2.zero);
-        //        break;
-        //    case (int)ENUMbuttonState.Disabled:
-        //        m_spriteRenderer.sprite = Sprite.Create(u_disabled, new Rect(0, 0, 1, 1), Vector2.zero);
-        //        break;
-        //    default: Debug.Log("GuiButton.Start() - default case should not happen"); break;
-        //}
+        switch (m_state)
+        {
+            case (uint)ENUMbuttonState.Hidden:
+                break;
+            case (uint)ENUMbuttonState.Up:
+                m_spriteRenderer.sprite = u_up;
+                break;
+            case (uint)ENUMbuttonState.Down:
+                m_spriteRenderer.sprite = u_down;
+                break;
+            case (uint)ENUMbuttonState.Disabled:
+                m_spriteRenderer.sprite = u_disabled;
+                break;
+            default: Debug.Log("GuiButton.Start() - default case should not happen"); break;
+        }
     }
 
     // changes the position and size of the button
@@ -125,7 +125,7 @@ public class GuiButton : MonoBehaviour
         // set touch region rectangle
         //switch (m_state)
         //{
-        //case (int)ENUMbuttonState.Hidden: // hide if button is hidden
+        //case (uint)ENUMbuttonState.Hidden: // hide if button is hidden
         //    m_region.Set(
         //        0,
         //        0,
@@ -165,75 +165,81 @@ public class GuiButton : MonoBehaviour
     }
 
     // sets button to pressed state
-    public void press(int id)
+    public uint press(uint id)
     {
-        Debug.Log("GuiBUtton.press() - Button [" + id + "] - " +
-            "button state is up = " + (m_state == (int)ENUMbuttonState.Up) + " - " +
-            "button Id is included in flag = " + ((id & m_buttonId) == m_buttonId));
+        //Debug.Log("GuiBUtton.press() - Button [" + id + "] - " +
+        //    "button state is up = " + (m_state == (uint)ENUMbuttonState.Up) + " - " +
+        //    "button Id is included in flag = " + ((id & m_buttonId) == m_buttonId));
 
         // only do if button is in up state
-        if (m_state != (int)ENUMbuttonState.Up || (id & m_buttonId) != m_buttonId)
-            return;
-        
+        if (m_state != (uint)ENUMbuttonState.Up || (id & m_buttonId) != m_buttonId)
+            return 0;
+
+        //Debug.Log("guibutton.press()");
+
         //Debug.Log("GuiButton.onPress()- m_region position " + m_region.position);
         //Debug.Log("GuiButton.onPress()- m_region size " + m_region.size);
 
         //Debug.Log("GuiButton.onPress()- button was pressed at " + touchPos);
         //Debug.Log("button [" + m_buttonId + "] pressed");
-        m_state = (int)ENUMbuttonState.Down;
+        m_state = (uint)ENUMbuttonState.Down;
 
         //m_spriteRenderer.sprite = Sprite.Create(u_down, new Rect(1, 1, 1, 1), Vector2.zero);
-        //u_material.SetTexture((int)ENUMbuttonState.Down, u_down);
+        //u_material.SetTexture((uint)ENUMbuttonState.Down, u_down);
+        return m_buttonId;
     }
 
     public bool contains(Vector2 touchPos)
     {
-        Debug.Log("GuiButton.contains() = " + m_region.Contains(touchPos));
+        //Debug.Log("GuiButton.contains() touchPos = " + touchPos);
+        //Debug.Log("GuiButton.contains() buttonPos = " + m_region.x + ", " + m_region.y);
+        //Debug.Log("GuiButton.contains() buttonSize = " + m_region.size.x + ", " + m_region.size.y);
+        //Debug.Log("GuiButton.contains() bool = " + m_region.Contains(touchPos));
         return m_region.Contains(touchPos);
     }
 
     // sets button to released state
-    public int release(int id)
+    public uint release(uint id)
     {
-        Debug.Log("GuiBUtton.release() - Button [" + id + "] - " +
-            "button state is down = " + (m_state == (int)ENUMbuttonState.Down) + " - " +
-            "button Id is included in flag = " + ((id & m_buttonId) == m_buttonId));
+        //Debug.Log("GuiBUtton.release() - Button [" + id + "] - " +
+        //    "button state is down = " + (m_state == (uint)ENUMbuttonState.Down) + " - " +
+        //    "button Id is included in flag = " + ((id & m_buttonId) == m_buttonId));
 
         //Debug.Log("guibutton.release() - id = " + id);
         //Debug.Log("guibutton.release() - m_state = " + m_state);
         //Debug.Log("guibutton.release() - m_buttonId = " + m_buttonId);
         // only do if button is in down state and has the correct id
-        if (m_state != (int)ENUMbuttonState.Down || (id & m_buttonId) != m_buttonId)
-            return (int)SystemMenu.ENUMsysButtonId.None;
+        if (m_state != (uint)ENUMbuttonState.Down || (id & m_buttonId) != m_buttonId)
+            return 0;
 
-        //Debug.Log("guibutton.release");
+        //Debug.Log("guibutton.release()");
 
         //Debug.Log("GuiButton.onRelease()- button was released");
 
         //Debug.Log("button [" + m_buttonId + "] released");
-        m_state = (int)ENUMbuttonState.Up;
+        m_state = (uint)ENUMbuttonState.Up;
         //m_spriteRenderer.sprite = Sprite.Create(u_up, new Rect(1, 1, 1, 1), Vector2.zero);
-        //u_material.SetTexture((int)ENUMbuttonState.Up, u_up);
+        //u_material.SetTexture((uint)ENUMbuttonState.Up, u_up);
 
         return m_buttonId;
     }
 
     // returns id if button is in pressed state and has the correct id
-    public int getIsPressed(int id)
+    public uint getIsPressed(uint id)
     {
-        Debug.Log("GuiBUtton.getIsPressed() - Button [" + id + "] - " +
-            "- button state is down = " + (m_state == (int)ENUMbuttonState.Down)+ " " +
-            "- button Id is included in flag = " + ((id & m_buttonId) == m_buttonId));
+        //Debug.Log("GuiBUtton.getIsPressed() - Button [" + id + "] - " +
+        //    "- button state is down = " + (m_state == (uint)ENUMbuttonState.Down)+ " " +
+        //    "- button Id is included in flag = " + ((id & m_buttonId) == m_buttonId));
 
         //Debug.Log("guibutton.getIsPressed() - id = " + id);
         //Debug.Log("guibutton.getIsPressed() - m_state = " + m_state);
         //Debug.Log("guibutton.getIsPressed() - m_buttonId = " + m_buttonId);
-        //Debug.Log("guibutton.getIsPressed() - m_state != (int)ENUMbuttonState.Down = " + (m_state != (int)ENUMbuttonState.Down));
+        //Debug.Log("guibutton.getIsPressed() - m_state != (uint)ENUMbuttonState.Down = " + (m_state != (uint)ENUMbuttonState.Down));
         //Debug.Log("guibutton.getIsPressed() - (id & m_buttonId) != id = " + ((id & m_buttonId) != id));
-        if (m_state != (int)ENUMbuttonState.Down || (id & m_buttonId) != m_buttonId)
-            return (int)SystemMenu.ENUMsysButtonId.None;
+        if (m_state != (uint)ENUMbuttonState.Down || (id & m_buttonId) != m_buttonId)
+            return 0;
 
-        Debug.Log("GuiBUtton.getIsPressed() - Button [" + id + "] is pressed - button Id = " + m_buttonId);
+        //Debug.Log("GuiBUtton.getIsPressed() - Button [" + id + "] is pressed - button Id = " + m_buttonId);
 
         //Debug.Log("guibutton.getispressed - " + m_buttonId + " = " + (id & m_buttonId));
 
@@ -241,7 +247,7 @@ public class GuiButton : MonoBehaviour
     }
 
     // returns the button's id
-    public int getId()
+    public uint getId()
     {
         return m_buttonId;
     }
