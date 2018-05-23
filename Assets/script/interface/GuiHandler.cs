@@ -197,11 +197,6 @@ public class GuiHandler : MonoBehaviour
     // toggle system mune on and off
     private void interfaceSystemMenuOpen()
     {
-        uint flag = u_systemMenu.getId();
-        Vector2 screen = new Vector2(m_screenWidth, m_screenHeight);
-
-        Debug.Log("GuiHandler.interfaceSystemMenuOpen() - u_systemMenu.getId() = " + flag);
-        
         m_numTouches = 0;
 
         for (int i = 0; i < m_numTouches; i++)
@@ -209,9 +204,14 @@ public class GuiHandler : MonoBehaviour
             m_touchIndex[i] = 0;
         }
 
+        uint flag = u_systemMenu.getId();
+        Vector2 screen = new Vector2(m_screenWidth, m_screenHeight);
+        Debug.Log("GuiHandler.interfaceSystemMenuOpen() - u_systemMenu.getId() = " + flag);
+
         // close menu if open
-        if ((flag & m_guiActiveUIStateMask) == flag)
-        {
+        //if ((flag & m_guiActiveUIStateMask) == flag)
+        if (BitMask.containsBits(m_guiActiveUIStateMask, flag))
+            {
             Debug.Log("Close System Menu");
             u_systemMenu.setActive(false, screen, u_hideObjectPosition);
 
@@ -238,71 +238,15 @@ public class GuiHandler : MonoBehaviour
 
     private uint interfaceSystemMenuOnHold(Vector2 touchPos, uint buttonId, uint touchState)
     {
-        // make this represent pressed buttons
-        //m_guiTouchStateMask = u_systemMenu.getPressedButtons((uint)SystemMenu.ENUMsysButtonId.All);
-
-        // remove released buttons from touchstate
+        // remove released buttons from touchState
         uint releasedButtons = u_systemMenu.getButtonTouched(buttonId, false, touchPos);
-        touchState -= (touchState & releasedButtons);
+        touchState = BitMask.clearBits(touchState, releasedButtons);
 
+        // add pressed buttons to touchState
         uint pressedButtons = u_systemMenu.getButtonTouched(buttonId, true, touchPos);
+        touchState = BitMask.setBits(touchState, pressedButtons);
         
-        // number where all bits are set to 1
-        uint maxValue = uint.MaxValue;
-
-        //Debug.Assert((maxValue.GetType() == pressedButtons.GetType()), 
-        //    "GuiHander.interfaceSystemMenuOnHold() - maxValue must be the same data type as pressedButtons");
-
-        //Debug.Log("============================\n============================");
-        //Debug.Log("Handler.onHold() - maxValue =        " + maxValue.ToString("00000000000000000000000000000000"));
-        //Debug.Log("Handler.onHold() - _touchState =     " + touchState.ToString("00000000000000000000000000000000"));
-        //Debug.Log("Handler.onHold() - _pressedButtons = " + pressedButtons.ToString("00000000000000000000000000000000"));
-        
-        // only add the flags touchState doesn't have
-        uint flags = ((pressedButtons ^ maxValue) ^ (pressedButtons & touchState));
-        //Debug.Log("Handler.onHold() - flags =           " + flags.ToString("00000000000000000000000000000000"));
-        flags = ~flags;
-        //Debug.Log("Handler.onHold() - ~flags =          " + flags.ToString("00000000000000000000000000000000"));
-
-        // if a button was added from moving touchPos don't run onRelease()
-        //if (flags == 0)
-        //   touchState -= (touchState & (uint)ENUMguiIndex.RunRelease);
-
-        touchState += flags;
-
-        //Debug.Log("Handler.onHold() - touchState =      " + touchState.ToString("00000000000000000000000000000000"));
-        //Debug.Log("Handler.onHold() - pressedButtons =  " + pressedButtons.ToString("00000000000000000000000000000000"));
-
         return touchState;
-
-        /*
-        how to get (touchState | pressedButtons) of pressedButtons' 1 digits only
-
-        00011000 < pressedButtons         // a       // bit mask
-        10010111 < touchState             // b       // value
-
-        11100111 < a ^ 11111111           // c       // create mask for excluded bits
-        00010000 < a & b                  // d       // get the 1 bits mask and value share
-        11110111 < c ^ d                  // e       // set all unwanted bits to 1
-        00001000 < ~e                     // result  // reverse bits
-
-       Debug.Log("============================\n============================\nSTART TEST BIT OPERATIONS");
-                                            // 8 bits                                          // 32 bits
-       uint allBitsOneUint = uint.MaxValue; // 255                                             // 4294967295
-       uint a = 24;                         // 24     (            8 + 16)                     // 24
-       uint b = 151;                        // 151    (1 + 2 + 4 +     16 +    +    + 128)     // 151
-       uint c = a ^ allBitsOneUint;         // 231    (1 + 2 + 4 +          32 + 64 + 128)     // 4294967271 (-24)
-       uint d = a & b;                      // 16     (                16)                     // 16
-       uint e = c ^ d;                      // 247    (1 + 2 + 4 +     16 + 32 + 64 + 128)     // 4294967287 (-8)
-       uint result = ~e;                    // 8      (            8)                          // 8
-       Debug.Log(" a       = " + a.ToString());                                                  
-       Debug.Log(" b       = " + b.ToString());
-       Debug.Log(" c(a ^ 1)= " + c.ToString());
-       Debug.Log(" d(a & b)= " + d.ToString());
-       Debug.Log(" e(c ^ d)= " + e.ToString());
-       Debug.Log(" result  = " + result.ToString()); // expecting 8
-       Debug.Log("END TEST BIT OPERATIONS\n============================\n============================");
-       */
     }
 
     private void interfaceSystemMenuOnRelease(uint buttonFlag)
@@ -439,7 +383,8 @@ public class GuiHandler : MonoBehaviour
         if (touchCount < m_numTouches)
         {
             //Debug.Log("GuildHandler.updateTouchIndex() - m_guiTouchStateMask = " + m_guiTouchStateMask);
-            m_guiTouchStateMask |= (uint)ENUMguiIndex.RunRelease;
+            //m_guiTouchStateMask |= (uint)ENUMguiIndex.RunRelease;
+            m_guiTouchStateMask = BitMask.setBits(m_guiTouchStateMask, (uint)ENUMguiIndex.RunRelease);
             //Debug.Log("GuildHandler.updateTouchIndex() - m_guiTouchStateMask = " + m_guiTouchStateMask);
         }
         
@@ -462,7 +407,8 @@ public class GuiHandler : MonoBehaviour
                         if (u_joystick.contains(touchPos) || (m_touchIndex[touchId] == (uint)ENUMguiIndex.Joystick))
                         {
                             // do if gui element is not active
-                            if (((uint)ENUMguiIndex.Joystick & m_guiTouchStateMask) != (uint)ENUMguiIndex.Joystick)
+                            //if (((uint)ENUMguiIndex.Joystick & m_guiTouchStateMask) != (uint)ENUMguiIndex.Joystick)
+                            if (BitMask.containsBits(m_guiTouchStateMask, (uint)ENUMguiIndex.Joystick) == false)
                             {
                                 Debug.Log("Touch Hold Position " + touchId + " is in the Joystick region");
 
@@ -470,7 +416,8 @@ public class GuiHandler : MonoBehaviour
                                 m_touchIndex[touchId] = (uint)ENUMguiIndex.Joystick;
 
                                 // add gui element flag to gui state
-                                m_guiTouchStateMask |= (uint)ENUMguiIndex.Joystick;
+                                //m_guiTouchStateMask |= (uint)ENUMguiIndex.Joystick;
+                                m_guiTouchStateMask = BitMask.setBits(m_guiTouchStateMask, (uint)ENUMguiIndex.Joystick);
 
                                 /////////////////////////////////
                                 // do stuff here
@@ -489,7 +436,8 @@ public class GuiHandler : MonoBehaviour
                         else if (u_swipe.contains(touchPos) || (m_touchIndex[touchId] == (uint)ENUMguiIndex.Swipe))
                         {
                             // do if gui element is not active
-                            if (((uint)ENUMguiIndex.Swipe & m_guiTouchStateMask) != (uint)ENUMguiIndex.Swipe)
+                            //if (((uint)ENUMguiIndex.Swipe & m_guiTouchStateMask) != (uint)ENUMguiIndex.Swipe)
+                            if (BitMask.containsBits(m_guiTouchStateMask, (uint)ENUMguiIndex.Swipe) == false)
                             {
                                 Debug.Log("Touch Hold Position " + touchId + " is in the Swipe region");
 
@@ -497,7 +445,8 @@ public class GuiHandler : MonoBehaviour
                                 m_touchIndex[touchId] = (uint)ENUMguiIndex.Swipe;
 
                                 // add gui element flag to gui state
-                                m_guiTouchStateMask |= (uint)ENUMguiIndex.Swipe;
+                                //m_guiTouchStateMask |= (uint)ENUMguiIndex.Swipe;
+                                m_guiTouchStateMask = BitMask.setBits(m_guiTouchStateMask, (uint)ENUMguiIndex.Swipe);
 
                                 /////////////////////////////////
                                 // do stuff here
@@ -523,7 +472,8 @@ public class GuiHandler : MonoBehaviour
                             /////////////////////////////
                             // only works for bitflag enum types
                             m_touchIndex[touchId] = u_systemMenu.getPressedButtons((uint)GameWindow.ENUMwindowObjectId.All);
-                            m_guiTouchStateMask |= m_touchIndex[touchId];
+                            //m_guiTouchStateMask |= m_touchIndex[touchId];
+                            m_guiTouchStateMask = BitMask.setBits(m_guiTouchStateMask, m_touchIndex[touchId]);
                             //Debug.Log("GuiHandler.updateTouchRegion() - DURING m_guiTouchStateMask  = " + m_guiTouchStateMask);
                             //Debug.Log("GuiHandler.updateTouchRegion() - DURING m_touchIndex[touchId]  = " + m_touchIndex[touchId]);
                         }
@@ -576,7 +526,8 @@ public class GuiHandler : MonoBehaviour
                             case (uint)ENUMguiIndex.Joystick:
                                 {
                                     // break if gui element is no longer touched
-                                    if (((uint)ENUMguiIndex.Joystick & m_guiTouchStateMask) != (uint)ENUMguiIndex.Joystick)
+                                    //if (((uint)ENUMguiIndex.Joystick & m_guiTouchStateMask) != (uint)ENUMguiIndex.Joystick)
+                                    if (BitMask.containsBits(m_guiTouchStateMask, (uint)ENUMguiIndex.Joystick) == false)
                                         break;
 
                                     // Debug.Log("Touch Position " + touchId + ": Joystick region held");
@@ -591,7 +542,8 @@ public class GuiHandler : MonoBehaviour
                             case (uint)ENUMguiIndex.Swipe:
                                 {
                                     // break if gui element is no longer touched
-                                    if (((uint)ENUMguiIndex.Swipe & m_guiTouchStateMask) != (uint)ENUMguiIndex.Swipe)
+                                    //if (((uint)ENUMguiIndex.Swipe & m_guiTouchStateMask) != (uint)ENUMguiIndex.Swipe)
+                                    if (BitMask.containsBits(m_guiTouchStateMask, (uint)ENUMguiIndex.Swipe) == false)
                                         break;
 
                                     //Debug.Log("Touch Position " + touchId + ": Swipe region held");
@@ -626,7 +578,8 @@ public class GuiHandler : MonoBehaviour
     // performs action on release for each touch
     private void updateTouchOnRelease(uint guiTouchStateMaskPrev)
     {
-        if ((m_guiTouchStateMask & (uint)ENUMguiIndex.RunRelease) != (uint)ENUMguiIndex.RunRelease)
+        //if ((m_guiTouchStateMask & (uint)ENUMguiIndex.RunRelease) != (uint)ENUMguiIndex.RunRelease)
+        if (BitMask.containsBits(m_guiTouchStateMask, (uint)ENUMguiIndex.RunRelease) == false)
             return;
         
         //Debug.Log("updateTouchOnRelease() - m_guiActiveUIStateMask " + m_guiActiveUIStateMask);
@@ -635,7 +588,11 @@ public class GuiHandler : MonoBehaviour
 
         // remove variable RunRelease flag
         //Debug.Log("GuiHandler.onRelease() m_guiTouchStateMask = " + m_guiTouchStateMask);
-        m_guiTouchStateMask -= (uint)ENUMguiIndex.RunRelease;
+        //m_guiTouchStateMask -= (uint)ENUMguiIndex.RunRelease;
+
+        // by default onRelease does not run
+        m_guiTouchStateMask = BitMask.clearBits(m_guiTouchStateMask, (uint)ENUMguiIndex.RunRelease);
+
         //Debug.Log("GuiHandler.onRelease() m_guiTouchStateMask = " + m_guiTouchStateMask);
         //Debug.Log("GuiHandler.onRelease() guiTouchStateMaskPrev = " + guiTouchStateMaskPrev);
 
@@ -648,16 +605,22 @@ public class GuiHandler : MonoBehaviour
                     //Debug.Log("if(" + (((uint)ENUMguiIndex.Joystick & guiTouchStateMaskPrev) == (uint)ENUMguiIndex.Joystick) + " && " +
                     //                  (((uint)ENUMguiIndex.Joystick & m_guiTouchStateMask) != (uint)ENUMguiIndex.Joystick) + ")");
 
-                    if (((uint)ENUMguiIndex.Joystick & guiTouchStateMaskPrev) == (uint)ENUMguiIndex.Joystick &&
-                        ((uint)ENUMguiIndex.Joystick & m_guiTouchStateMask) != (uint)ENUMguiIndex.Joystick)
+                    //if (((uint)ENUMguiIndex.Joystick & guiTouchStateMaskPrev) == (uint)ENUMguiIndex.Joystick &&
+                    //    ((uint)ENUMguiIndex.Joystick & m_guiTouchStateMask) != (uint)ENUMguiIndex.Joystick)
+
+                    // check if this was released this frame
+                    if (BitMask.containsBits(guiTouchStateMaskPrev, (uint)ENUMguiIndex.Joystick) == true &&
+                        (BitMask.containsBits(m_guiTouchStateMask, (uint)ENUMguiIndex.Joystick) == false))
                     {
                         Debug.Log("Touch Joystick region released");
 
                         // remove this from all touches
                         for(uint i = 0; i < m_maxTouchCount; i++)
                         {
-                            uint v = (m_touchIndex[i] & (uint)ENUMguiIndex.Joystick);
-                            m_touchIndex[i] -= v;
+                            //uint v = (m_touchIndex[i] & (uint)ENUMguiIndex.Joystick);
+                            //m_touchIndex[i] -= v;
+
+                            m_touchIndex[i] = BitMask.clearBits(m_touchIndex[i], (uint)ENUMguiIndex.Joystick);
                         }
 
                         /////////////////////////////////
@@ -666,16 +629,20 @@ public class GuiHandler : MonoBehaviour
                         /////////////////////////////////
                     }
 
-                    if (((uint)ENUMguiIndex.Swipe & guiTouchStateMaskPrev) == (uint)ENUMguiIndex.Swipe &&
-                        ((uint)ENUMguiIndex.Swipe & m_guiTouchStateMask) != (uint)ENUMguiIndex.Swipe)
+                    //if (((uint)ENUMguiIndex.Swipe & guiTouchStateMaskPrev) == (uint)ENUMguiIndex.Swipe &&
+                    //    ((uint)ENUMguiIndex.Swipe & m_guiTouchStateMask) != (uint)ENUMguiIndex.Swipe)
+                    if (BitMask.containsBits(guiTouchStateMaskPrev, (uint)ENUMguiIndex.Swipe) == true &&
+                        (BitMask.containsBits(m_guiTouchStateMask, (uint)ENUMguiIndex.Swipe) == false))
                     {
                         Debug.Log("Touch Swipe region released");
 
                         // remove this from all touches
                         for (uint i = 0; i < m_maxTouchCount; i++)
                         {
-                            uint v = (m_touchIndex[i] & (uint)ENUMguiIndex.Swipe);
-                            m_touchIndex[i] -= v;
+                            //uint v = (m_touchIndex[i] & (uint)ENUMguiIndex.Swipe);
+                            //m_touchIndex[i] -= v;
+
+                            m_touchIndex[i] = BitMask.clearBits(m_touchIndex[i], (uint)ENUMguiIndex.Swipe);
                         }
 
                         /////////////////////////////////
@@ -692,27 +659,33 @@ public class GuiHandler : MonoBehaviour
                     // run omly if a button was released
                     //if (m_guiTouchStateMask < guiTouchStatePrev)
                     // check each region for if it was held last upadate and is NOT held this update
-                    if (((uint)GameWindow.ENUMwindowObjectId.Continue & guiTouchStateMaskPrev) == (uint)GameWindow.ENUMwindowObjectId.Continue &&
-                        ((uint)GameWindow.ENUMwindowObjectId.Continue & m_guiTouchStateMask) != (uint)GameWindow.ENUMwindowObjectId.Continue)
+                    //if (((uint)GameWindow.ENUMwindowObjectId.Continue & guiTouchStateMaskPrev) == (uint)GameWindow.ENUMwindowObjectId.Continue &&
+                    //    ((uint)GameWindow.ENUMwindowObjectId.Continue & m_guiTouchStateMask) != (uint)GameWindow.ENUMwindowObjectId.Continue)
+                    if (BitMask.containsBits(guiTouchStateMaskPrev, (uint)GameWindow.ENUMwindowObjectId.Continue) == true &&
+                        (BitMask.containsBits(m_guiTouchStateMask, (uint)GameWindow.ENUMwindowObjectId.Continue) == false))
                     {
                         // remove this from all touches
                         for (uint i = 0; i < m_maxTouchCount; i++)
                         {
-                            uint v = (m_touchIndex[i] & (uint)GameWindow.ENUMwindowObjectId.Continue);
-                            m_touchIndex[i] -= v;
+                            m_touchIndex[i] = BitMask.clearBits(m_touchIndex[i], (uint)GameWindow.ENUMwindowObjectId.Continue);
+                            //uint v = (m_touchIndex[i] & (uint)GameWindow.ENUMwindowObjectId.Continue);
+                            //m_touchIndex[i] -= v;
                         }
                         //Debug.Log("GuiHandler.onRelease - System Menu Continue button released");
                         interfaceSystemMenuOnRelease((uint)GameWindow.ENUMwindowObjectId.Continue);
                     }
 
-                    if (((uint)GameWindow.ENUMwindowObjectId.Quit & guiTouchStateMaskPrev) == (uint)GameWindow.ENUMwindowObjectId.Quit &&
-                        ((uint)GameWindow.ENUMwindowObjectId.Quit & m_guiTouchStateMask) != (uint)GameWindow.ENUMwindowObjectId.Quit)
+                    //if (((uint)GameWindow.ENUMwindowObjectId.Quit & guiTouchStateMaskPrev) == (uint)GameWindow.ENUMwindowObjectId.Quit &&
+                    //    ((uint)GameWindow.ENUMwindowObjectId.Quit & m_guiTouchStateMask) != (uint)GameWindow.ENUMwindowObjectId.Quit)
+                    if (BitMask.containsBits(guiTouchStateMaskPrev, (uint)GameWindow.ENUMwindowObjectId.Quit) == true &&
+                        (BitMask.containsBits(m_guiTouchStateMask, (uint)GameWindow.ENUMwindowObjectId.Quit) == false))
                     {
                         // remove this from all touches
                         for (uint i = 0; i < m_maxTouchCount; i++)
                         {
-                            uint v = (m_touchIndex[i] & (uint)GameWindow.ENUMwindowObjectId.Continue);
-                            m_touchIndex[i] -= v;
+                            m_touchIndex[i] = BitMask.clearBits(m_touchIndex[i], (uint)GameWindow.ENUMwindowObjectId.Quit);
+                            //uint v = (m_touchIndex[i] & (uint)GameWindow.ENUMwindowObjectId.Continue);
+                            //m_touchIndex[i] -= v;
                         }
                         //Debug.Log("GuiHandler.onRelease - System Menu Quit button released");
                         interfaceSystemMenuOnRelease((uint)GameWindow.ENUMwindowObjectId.Quit);

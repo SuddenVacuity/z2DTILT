@@ -32,7 +32,7 @@ public class GuiButton : MonoBehaviour
     private uint m_buttonId = 0;               // used by menu to keep track of the button
     private uint m_state = 0;                  // state of the button - uses ENUMbuttonState
     private Rect m_region = Rect.zero;        // current position and size of the button
-
+    
     public void Start()
     {
         // set reference for the spriterenderer

@@ -137,7 +137,13 @@ System Menu - Prefab
 CHANGELOG
 ==============================================
 
-05/15/2017 - v0.0.0 - State Tracking Update + Timers - 0001
+
+05/22/2017 - v0.0.0.2 - add bitfield class
+===============================
+-add bit field class
+-add widgets library
+
+05/15/2017 - v0.0.0.1 - State Tracking Update, Timers, Input Control - 0001
 ===============================
 
 -added temporary way to exit if touchState breaks
@@ -151,7 +157,7 @@ CHANGELOG
 -changed enums to uint type
 
 
-05/12/2017 - v0.0.0 - Initial Commit
+05/12/2017 - v0.0.0.0 - Initial Commit
 ===============================
 
 -multiple touches are handled
